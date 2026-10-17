@@ -67,7 +67,7 @@ export default function OutboxPage() {
         </p>
       </div>
 
-      <div className="flex gap-2 text-xs font-mono">
+      <div className="flex gap-2 text-xs font-mono overflow-x-auto whitespace-nowrap pb-1">
         {['', 'draft', 'approved', 'sent', 'rejected'].map((s) => (
           <button
             key={s}

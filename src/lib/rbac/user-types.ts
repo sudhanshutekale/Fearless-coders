@@ -5,10 +5,11 @@ export interface AuthUser {
   name: string;
   email: string;
   role: UserRole;
+  studentId?: string;
   avatarUrl?: string;
 }
 
-export const DEMO_USERS: Record<UserRole, { email: string; name: string; title: string; role: UserRole; avatar: string; description: string }> = {
+export const DEMO_USERS: Record<UserRole, { email: string; name: string; title: string; role: UserRole; studentId?: string; avatar: string; description: string }> = {
   owner: {
     email: 'owner@instipilot.com',
     name: 'Priya Sharma',
@@ -40,5 +41,14 @@ export const DEMO_USERS: Record<UserRole, { email: string; name: string; title: 
     role: 'accounts',
     avatar: 'https://images.unsplash.com/photo-1580489944761-15a19d654956?w=150',
     description: 'Finance & Compliance — Fee structures, EMI tracking, bank reconciliation, receipts.'
+  },
+  student: {
+    email: 'student@instipilot.com',
+    name: 'Aarav Gupta',
+    title: 'Student (Java Fullstack Morning Alpha)',
+    role: 'student',
+    studentId: 's_001',
+    avatar: 'https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?w=150',
+    description: 'Student Portal — Personal schedule, attendance radar, recordings, and fee EMI status.'
   }
 };

@@ -144,7 +144,7 @@ export default function AuditLogPage() {
       {/* Log Table */}
       <div className="rounded-2xl border border-slate-800 bg-slate-900/80 backdrop-blur-xl overflow-hidden shadow-glass">
         <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs">
+          <table className="w-full text-left text-xs min-w-[700px]">
             <thead className="bg-slate-950/80 border-b border-slate-800 text-slate-400 font-mono text-[10px] uppercase">
               <tr>
                 <th className="py-3 px-4">Timestamp</th>

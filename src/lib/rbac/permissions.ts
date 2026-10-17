@@ -1,4 +1,4 @@
-export type UserRole = 'owner' | 'counselor' | 'trainer' | 'accounts';
+export type UserRole = 'owner' | 'counselor' | 'trainer' | 'accounts' | 'student';
 
 export interface RolePermissionConfig {
   role: UserRole;
@@ -30,7 +30,8 @@ export const ROLE_PERMISSIONS: Record<UserRole, RolePermissionConfig> = {
       'view_financials', 'reconcile_fees', 'view_attendance',
       'manage_timetable', 'replan_timetable', 'copilot_query',
       'approve_outbox', 'reject_outbox', 'view_audit_log',
-      'generate_certificates', 'manage_batches', 'manage_students'
+      'generate_certificates', 'manage_batches', 'manage_students',
+      'verify_payment_proof'
     ],
     navItems: [
       { name: 'Dashboard', href: '/dashboard', icon: 'LayoutDashboard' },
@@ -107,7 +108,7 @@ export const ROLE_PERMISSIONS: Record<UserRole, RolePermissionConfig> = {
     description: 'Fee collection, EMI schedules, payment verification, UPI/bank reconciliation. No access to pedagogical material or biometric logs.',
     allowedTables: [
       'students', 'courses', 'batches', 'fee_plans',
-      'emi_installments', 'payments', 'messages_outbox', 'audit_log'
+      'emi_installments', 'payments', 'payment_proofs', 'messages_outbox', 'audit_log'
     ],
     forbiddenTables: ['attendance', 'assignments', 'submissions', 'recordings', 'timetable_slots'],
     deniedColumnPatterns: ['biometric', 'check_in_time', 'ip_or_location', 'submission_url', 'recording_url'],
@@ -122,6 +123,31 @@ export const ROLE_PERMISSIONS: Record<UserRole, RolePermissionConfig> = {
       { name: 'Students', href: '/students', icon: 'Users' },
       { name: 'Batches', href: '/batches', icon: 'Layers' },
       { name: 'Outbox', href: '/outbox', icon: 'Send' }
+    ]
+  },
+
+  student: {
+    role: 'student',
+    displayName: 'Student Portal',
+    badgeColor: 'border-blue-500/50 text-blue-400 bg-blue-950/30',
+    description: 'Enrolled student view. Access to personal schedule, attendance logs, recordings, and personal fee payment installments. Strictly restricted from institute management, admin actions, and other students private records.',
+    allowedTables: [
+      'students', 'enrollments', 'batches', 'courses', 'trainers', 'rooms',
+      'attendance', 'assignments', 'submissions', 'recordings',
+      'timetable_slots', 'fee_plans', 'emi_installments', 'payments', 'payment_proofs'
+    ],
+    forbiddenTables: ['users', 'messages_outbox', 'audit_log'],
+    deniedColumnPatterns: ['password_hash', 'salary', 'bank_statement', 'risk_score', 'reconciliation'],
+    allowedActions: [
+      'view_own_portal', 'view_own_attendance', 'view_own_fees', 'view_recordings',
+      'view_timetable', 'view_assignments', 'submit_assignment', 'upload_payment_proof', 'copilot_query'
+    ],
+    navItems: [
+      { name: 'Student Portal', href: '/student-portal', icon: 'GraduationCap' },
+      { name: 'My Schedule', href: '/timetable', icon: 'CalendarClock' },
+      { name: 'My Attendance', href: '/attendance', icon: 'UserCheck' },
+      { name: 'My Recordings', href: '/recordings', icon: 'Video' },
+      { name: 'My Fees & EMIs', href: '/fees', icon: 'CreditCard' }
     ]
   }
 };

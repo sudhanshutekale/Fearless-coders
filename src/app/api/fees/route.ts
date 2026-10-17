@@ -18,6 +18,61 @@ export async function GET(req: NextRequest) {
 
     const db = getDb();
 
+    // If student, return only their own personal installments and payment receipts
+    if (user.role === 'student') {
+      const studentId = user.studentId || 's_001';
+
+      const overdueEmis = db.prepare(`
+        SELECT 
+          e.id, e.installment_no, e.due_date, e.amount, e.status,
+          s.id as student_id, s.name as student_name, s.phone as student_phone,
+          b.name as batch_name, c.name as course_name
+        FROM emi_installments e
+        JOIN students s ON s.id = e.student_id
+        JOIN fee_plans fp ON fp.id = e.fee_plan_id
+        JOIN courses c ON c.id = fp.course_id
+        LEFT JOIN enrollments en ON en.student_id = s.id
+        LEFT JOIN batches b ON b.id = en.batch_id
+        WHERE e.status = 'overdue' AND s.id = ?
+        ORDER BY e.due_date ASC
+      `).all(studentId);
+
+      const upcomingEmis = db.prepare(`
+        SELECT 
+          e.id, e.installment_no, e.due_date, e.amount, e.status,
+          s.id as student_id, s.name as student_name, s.phone as student_phone,
+          b.name as batch_name, c.name as course_name
+        FROM emi_installments e
+        JOIN students s ON s.id = e.student_id
+        JOIN fee_plans fp ON fp.id = e.fee_plan_id
+        JOIN courses c ON c.id = fp.course_id
+        LEFT JOIN enrollments en ON en.student_id = s.id
+        LEFT JOIN batches b ON b.id = en.batch_id
+        WHERE e.status = 'pending' AND s.id = ?
+        ORDER BY e.due_date ASC
+      `).all(studentId);
+
+      const recentPayments = db.prepare(`
+        SELECT 
+          p.id, p.source, p.reference, p.amount, p.date, p.notes, p.status,
+          s.name as student_name, s.phone as student_phone
+        FROM payments p
+        JOIN students s ON s.id = p.student_id
+        WHERE s.id = ?
+        ORDER BY p.date DESC
+      `).all(studentId);
+
+      const totalPaid = (db.prepare("SELECT SUM(amount) as s FROM payments WHERE student_id = ?").get(studentId) as any)?.s || 0;
+      const totalPending = (db.prepare("SELECT SUM(amount) as s FROM emi_installments WHERE student_id = ? AND status != 'paid'").get(studentId) as any)?.s || 0;
+
+      return NextResponse.json({
+        summary: { totalCollected: totalPaid, totalOverdue: 0, totalPending },
+        overdueEmis,
+        upcomingEmis,
+        recentPayments
+      });
+    }
+
     // 1. All Overdue EMIs
     const overdueEmis = db.prepare(`
       SELECT 

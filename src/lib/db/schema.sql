@@ -9,7 +9,7 @@ CREATE TABLE IF NOT EXISTS users (
     name TEXT NOT NULL,
     email TEXT UNIQUE NOT NULL,
     password_hash TEXT NOT NULL,
-    role TEXT NOT NULL CHECK(role IN ('owner', 'counselor', 'trainer', 'accounts')),
+    role TEXT NOT NULL CHECK(role IN ('owner', 'counselor', 'trainer', 'accounts', 'student')),
     avatar_url TEXT,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
@@ -143,6 +143,26 @@ CREATE TABLE IF NOT EXISTS payments (
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY(emi_id) REFERENCES emi_installments(id) ON DELETE SET NULL,
     FOREIGN KEY(student_id) REFERENCES students(id) ON DELETE CASCADE
+);
+
+-- 10b. Student Payment Proofs (Student uploads photo proof, Owner verifies)
+CREATE TABLE IF NOT EXISTS payment_proofs (
+    id TEXT PRIMARY KEY,
+    student_id TEXT NOT NULL,
+    emi_id TEXT NOT NULL,
+    amount REAL NOT NULL,
+    reference TEXT NOT NULL,
+    proof_image_url TEXT NOT NULL,
+    payment_mode TEXT DEFAULT 'upi',
+    notes TEXT,
+    status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending', 'verified', 'rejected')),
+    rejection_reason TEXT,
+    verified_by TEXT,
+    verified_at DATETIME,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY(student_id) REFERENCES students(id) ON DELETE CASCADE,
+    FOREIGN KEY(emi_id) REFERENCES emi_installments(id) ON DELETE CASCADE,
+    FOREIGN KEY(verified_by) REFERENCES users(id) ON DELETE SET NULL
 );
 
 -- 11. Attendance

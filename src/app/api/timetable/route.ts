@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
+import { getSessionUser } from '@/lib/rbac/auth';
 
 export const dynamic = 'force-dynamic';
 
@@ -46,10 +47,36 @@ function hasRoomClash(slots: Slot[], roomId: string | null, day: string, start: 
 
 export async function GET(req: NextRequest) {
   try {
+    const user = await getSessionUser();
     const db = getDb();
     const searchParams = req.nextUrl.searchParams;
     const trainerId = searchParams.get('trainerId') || '';
     const roomId = searchParams.get('roomId') || '';
+
+    // If student, filter slots strictly to their enrolled batch
+    if (user.role === 'student') {
+      const studentId = user.studentId || 's_001';
+      const studentSlots = db.prepare(`
+        SELECT 
+          ts.id, ts.day_of_week, ts.start_time, ts.end_time, ts.is_active, ts.notes,
+          b.id as batch_id, b.name as batch_name, b.mode, b.max_seats, b.online_seat_limit,
+          c.id as course_id, c.name as course_name, c.code as course_code,
+          t.id as trainer_id, t.name as trainer_name, t.availability,
+          r.id as room_id, r.name as room_name, r.capacity as room_capacity
+        FROM timetable_slots ts
+        JOIN batches b ON b.id = ts.batch_id
+        JOIN enrollments en ON en.batch_id = b.id
+        JOIN courses c ON c.id = b.course_id
+        JOIN trainers t ON t.id = ts.trainer_id
+        LEFT JOIN rooms r ON r.id = ts.room_id
+        WHERE en.student_id = ? AND ts.is_active = 1
+        ORDER BY ts.start_time ASC
+      `).all(studentId);
+
+      const trainers = db.prepare('SELECT id, name FROM trainers').all();
+      const rooms = db.prepare('SELECT id, name, capacity FROM rooms ORDER BY name').all();
+      return NextResponse.json({ slots: studentSlots, trainers, rooms });
+    }
 
     let query = `
       SELECT 
@@ -82,6 +109,10 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try {
+    const user = await getSessionUser();
+    if (user.role === 'student') {
+      return NextResponse.json({ error: 'Forbidden: Students cannot re-plan timetables.' }, { status: 403 });
+    }
     const body = await req.json();
     const { action } = body;
 

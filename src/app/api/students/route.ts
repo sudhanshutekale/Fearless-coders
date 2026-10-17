@@ -57,6 +57,12 @@ export async function GET(req: NextRequest) {
       params.push(status);
     }
 
+    // Strict student isolation: Students can only view their own record
+    if (user.role === 'student') {
+      query += ` AND s.id = ?`;
+      params.push(user.studentId || 's_001');
+    }
+
     query += ` GROUP BY s.id ORDER BY s.join_date DESC, s.name ASC`;
 
     const rows = db.prepare(query).all(...params) as any[];
@@ -125,8 +131,8 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   try {
     const user = await getSessionUser();
-    if (user.role === 'trainer') {
-      return NextResponse.json({ error: 'Trainers are not authorized to enroll new students.' }, { status: 403 });
+    if (user.role === 'trainer' || user.role === 'student') {
+      return NextResponse.json({ error: 'You are not authorized to enroll new students.' }, { status: 403 });
     }
 
     const body = await req.json();
@@ -192,7 +198,7 @@ export async function POST(req: NextRequest) {
       // Log in audit_log
       db.prepare(`
         INSERT INTO audit_log (id, user_id, user_name, role, action, query, result_summary, status)
-        VALUES (?, ?, ?, ?, 'student_enrolled', ?, ?, 'success')
+        VALUES (?, ?, ?, ?, 'student_enrolled', ?, ?, ?)
       `).run(
         `aud_enr_${Date.now()}`,
         user.id,
@@ -210,3 +216,86 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: err.message }, { status: 500 });
   }
 }
+
+export async function PATCH(req: NextRequest) {
+  try {
+    const user = await getSessionUser();
+    if (user.role === 'student' || user.role === 'trainer') {
+      return NextResponse.json({ error: 'You are not authorized to edit student records.' }, { status: 403 });
+    }
+    const body = await req.json();
+    const { id, name, email, phone, guardianName, guardianPhone, city, college, status, batchId } = body;
+
+    if (!id) {
+      return NextResponse.json({ error: 'Student ID is required.' }, { status: 400 });
+    }
+
+    const db = getDb();
+    const existing = db.prepare('SELECT id, name, guardian_name, guardian_phone FROM students WHERE id = ?').get(id) as any;
+    if (!existing) {
+      return NextResponse.json({ error: 'Student not found.' }, { status: 404 });
+    }
+
+    // 1. Update students table
+    db.prepare(`
+      UPDATE students
+      SET 
+        name = COALESCE(?, name),
+        email = COALESCE(?, email),
+        phone = COALESCE(?, phone),
+        guardian_name = ?,
+        guardian_phone = ?,
+        city = COALESCE(?, city),
+        college = COALESCE(?, college),
+        status = COALESCE(?, status)
+      WHERE id = ?
+    `).run(
+      name || null,
+      email || null,
+      phone || null,
+      guardianName !== undefined ? guardianName : existing.guardian_name,
+      guardianPhone !== undefined ? guardianPhone : existing.guardian_phone,
+      city || null,
+      college || null,
+      status || null,
+      id
+    );
+
+    // 2. If batchId is provided, update or insert into enrollments
+    if (batchId) {
+      const currentEnrollment = db.prepare('SELECT id FROM enrollments WHERE student_id = ?').get(id) as any;
+      if (currentEnrollment) {
+        db.prepare('UPDATE enrollments SET batch_id = ? WHERE student_id = ?').run(batchId, id);
+      } else {
+        db.prepare(`
+          INSERT INTO enrollments (id, student_id, batch_id, preferred_mode, status)
+          VALUES (?, ?, ?, 'hybrid', 'active')
+        `).run(`enr_${Date.now()}`, id, batchId);
+      }
+    }
+
+    // 3. Audit log
+    db.prepare(`
+      INSERT INTO audit_log (id, user_id, user_name, role, action, query, result_summary, status)
+      VALUES (?, ?, ?, ?, 'update_student', ?, ?, 'success')
+    `).run(
+      `aud_upd_${Date.now()}`,
+      user.id,
+      user.name,
+      user.role,
+      `Updated student ${id} (${name || existing.name})`,
+      `Guardian: "${guardianName !== undefined ? guardianName : existing.guardian_name}" (Phone: ${guardianPhone !== undefined ? guardianPhone : existing.guardian_phone})`
+    );
+
+    const updated = db.prepare('SELECT * FROM students WHERE id = ?').get(id) as any;
+
+    return NextResponse.json({ 
+      success: true, 
+      student: updated,
+      message: `Successfully updated ${updated?.name || 'student'}'s profile and guardian details.` 
+    });
+  } catch (err: any) {
+    return NextResponse.json({ error: err.message }, { status: 500 });
+  }
+}
+

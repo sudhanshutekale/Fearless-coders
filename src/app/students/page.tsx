@@ -16,7 +16,12 @@ import {
   Calendar,
   Building,
   GraduationCap,
-  Sparkles
+  Sparkles,
+  Edit3,
+  Shield,
+  Check,
+  AlertCircle,
+  UserCheck
 } from 'lucide-react';
 
 export default function StudentsPage() {
@@ -27,6 +32,12 @@ export default function StudentsPage() {
   const [filterRiskOnly, setFilterRiskOnly] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
   const [generatingCertId, setGeneratingCertId] = useState<string | null>(null);
+  const [statusMessage, setStatusMessage] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
+  const [availableBatches, setAvailableBatches] = useState<any[]>([]);
+
+  // Edit Student Form State
+  const [editingStudent, setEditingStudent] = useState<any | null>(null);
+  const [savingEdit, setSavingEdit] = useState(false);
 
   // New Student Form State
   const [newStudent, setNewStudent] = useState({
@@ -40,6 +51,18 @@ export default function StudentsPage() {
     batchId: 'b_java_m1'
   });
   const [savingStudent, setSavingStudent] = useState(false);
+
+  const fetchBatches = async () => {
+    try {
+      const res = await fetch('/api/batches');
+      if (res.ok) {
+        const json = await res.json();
+        setAvailableBatches(json.batches || []);
+      }
+    } catch (e) {
+      console.error(e);
+    }
+  };
 
   const fetchStudents = async () => {
     try {
@@ -63,16 +86,23 @@ export default function StudentsPage() {
     fetchStudents();
   }, [search, selectedBatch]);
 
+  useEffect(() => {
+    fetchBatches();
+  }, []);
+
   const handleCreateStudent = async (e: React.FormEvent) => {
     e.preventDefault();
     setSavingStudent(true);
+    setStatusMessage(null);
     try {
       const res = await fetch('/api/students', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(newStudent)
       });
+      const data = await res.json();
       if (res.ok) {
+        setStatusMessage({ text: `Successfully enrolled ${newStudent.name}!`, type: 'success' });
         setShowAddModal(false);
         setNewStudent({
           name: '',
@@ -85,11 +115,39 @@ export default function StudentsPage() {
           batchId: 'b_java_m1'
         });
         fetchStudents();
+      } else {
+        setStatusMessage({ text: data.error || 'Failed to enroll student', type: 'error' });
       }
-    } catch (err) {
-      console.error(err);
+    } catch (err: any) {
+      setStatusMessage({ text: err.message, type: 'error' });
     } finally {
       setSavingStudent(false);
+    }
+  };
+
+  const handleUpdateStudent = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingStudent) return;
+    setSavingEdit(true);
+    setStatusMessage(null);
+    try {
+      const res = await fetch('/api/students', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(editingStudent)
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setStatusMessage({ text: data.message || `Successfully updated ${editingStudent.name}!`, type: 'success' });
+        setEditingStudent(null);
+        fetchStudents();
+      } else {
+        setStatusMessage({ text: data.error || 'Failed to update student', type: 'error' });
+      }
+    } catch (err: any) {
+      setStatusMessage({ text: err.message, type: 'error' });
+    } finally {
+      setSavingEdit(false);
     }
   };
 
@@ -148,9 +206,33 @@ export default function StudentsPage() {
         </button>
       </div>
 
+      {/* Status Message Alert */}
+      {statusMessage && (
+        <div className={`p-4 rounded-2xl border flex items-center justify-between text-xs animate-in fade-in duration-200 ${
+          statusMessage.type === 'success'
+            ? 'bg-emerald-950/50 border-emerald-500/40 text-emerald-300'
+            : 'bg-rose-950/50 border-rose-500/40 text-rose-300'
+        }`}>
+          <div className="flex items-center gap-2.5">
+            {statusMessage.type === 'success' ? (
+              <Check className="w-4 h-4 text-emerald-400 flex-shrink-0" />
+            ) : (
+              <AlertCircle className="w-4 h-4 text-rose-400 flex-shrink-0" />
+            )}
+            <span>{statusMessage.text}</span>
+          </div>
+          <button 
+            onClick={() => setStatusMessage(null)}
+            className="text-slate-400 hover:text-white p-1"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
+
       {/* Filter and Search Bar */}
-      <div className="p-4 rounded-2xl border border-slate-800 bg-slate-900/80 backdrop-blur-xl flex flex-wrap items-center justify-between gap-3">
-        <div className="flex flex-1 items-center gap-3 min-w-[280px]">
+      <div className="p-4 rounded-2xl border border-slate-800 bg-slate-900/80 backdrop-blur-xl flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+        <div className="flex flex-col sm:flex-row flex-1 items-stretch sm:items-center gap-3">
           <div className="relative flex-1">
             <Search className="w-4 h-4 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2" />
             <input
@@ -165,17 +247,25 @@ export default function StudentsPage() {
           <select
             value={selectedBatch}
             onChange={(e) => setSelectedBatch(e.target.value)}
-            className="py-2 px-3 rounded-xl bg-slate-950 border border-slate-800 text-xs text-slate-300 focus:outline-none focus:border-cyan-500/80"
+            className="w-full sm:w-auto py-2 px-3 rounded-xl bg-slate-950 border border-slate-800 text-xs text-slate-300 focus:outline-none focus:border-cyan-500/80"
           >
             <option value="">All Batches</option>
-            <option value="b_java_m1">Java Morning (Alpha)</option>
-            <option value="b_java_fast">Java Fast-Track</option>
-            <option value="b_java_e1">Java Evening Pro</option>
-            <option value="b_py_m2">Python Data Eng</option>
-            <option value="b_mern_e2">Modern MERN</option>
-            <option value="b_ai_w2">Weekend AI/ML</option>
-            <option value="b_iot_m3">IoT Hardware Lab</option>
-            <option value="b_dbms_w1">Database Global</option>
+            {availableBatches.length > 0 ? (
+              availableBatches.map(b => (
+                <option key={b.id} value={b.id}>{b.name}</option>
+              ))
+            ) : (
+              <>
+                <option value="b_java_m1">Java Morning (Alpha)</option>
+                <option value="b_java_fast">Java Fast-Track</option>
+                <option value="b_java_e1">Java Evening Pro</option>
+                <option value="b_py_m2">Python Data Eng</option>
+                <option value="b_mern_e2">Modern MERN</option>
+                <option value="b_ai_w2">Weekend AI/ML</option>
+                <option value="b_iot_m3">IoT Hardware Lab</option>
+                <option value="b_dbms_w1">Database Global</option>
+              </>
+            )}
           </select>
         </div>
 
@@ -196,7 +286,7 @@ export default function StudentsPage() {
       {/* Students Table */}
       <div className="rounded-2xl border border-slate-800 bg-slate-900/80 backdrop-blur-xl overflow-hidden shadow-glass">
         <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs">
+          <table className="w-full text-left text-xs min-w-[760px]">
             <thead className="bg-slate-950/80 border-b border-slate-800 text-slate-400 font-mono uppercase text-[10px] tracking-wider">
               <tr>
                 <th className="py-3 px-4">Student & Contact</th>
@@ -236,6 +326,25 @@ export default function StudentsPage() {
                         </div>
                         <div className="text-[10px] text-slate-500 font-mono mt-0.5 truncate max-w-[200px]">
                           {st.email}
+                        </div>
+                        {/* Guardian Name Display */}
+                        <div className="mt-1.5 flex items-center gap-1.5 text-[11px] text-slate-300">
+                          <span className="text-[9px] uppercase font-mono px-1.5 py-0.5 rounded bg-violet-950/80 text-violet-300 border border-violet-800/60 flex items-center gap-1">
+                            <Shield className="w-2.5 h-2.5" />
+                            Guardian
+                          </span>
+                          <span className="font-medium text-slate-200">
+                            {st.guardian_name ? (
+                              st.guardian_name
+                            ) : (
+                              <span className="text-slate-500 italic">Not set</span>
+                            )}
+                          </span>
+                          {st.guardian_phone && (
+                            <span className="text-slate-500 font-mono text-[10px]">
+                              ({st.guardian_phone})
+                            </span>
+                          )}
                         </div>
                       </td>
 
@@ -307,6 +416,26 @@ export default function StudentsPage() {
                       {/* Actions */}
                       <td className="py-3.5 px-4 text-right">
                         <div className="flex items-center justify-end gap-2">
+                          {/* Edit Student & Guardian Name Button */}
+                          <button
+                            onClick={() => setEditingStudent({
+                              id: st.id,
+                              name: st.name,
+                              email: st.email,
+                              phone: st.phone,
+                              guardianName: st.guardian_name || '',
+                              guardianPhone: st.guardian_phone || '',
+                              city: st.city || 'Pune',
+                              college: st.college || '',
+                              status: st.status || 'active',
+                              batchId: st.batch_id || 'b_java_m1'
+                            })}
+                            className="p-2 rounded-lg bg-slate-800 hover:bg-emerald-600 hover:text-white text-slate-300 transition-colors"
+                            title="Edit Student & Guardian Name"
+                          >
+                            <Edit3 className="w-3.5 h-3.5" />
+                          </button>
+
                           {/* Outreach WhatsApp */}
                           <a
                             href={`https://wa.me/${st.phone?.replace(/[^0-9]/g, '')}?text=${encodeURIComponent(
@@ -343,7 +472,7 @@ export default function StudentsPage() {
       {/* Add Student Modal */}
       {showAddModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm animate-in fade-in duration-150">
-          <div className="w-full max-w-lg rounded-2xl border border-slate-700 bg-command-darkest p-6 shadow-2xl space-y-4">
+          <div className="w-full max-w-lg rounded-2xl border border-slate-700 bg-command-darkest p-6 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between border-b border-slate-800 pb-3">
               <div className="flex items-center gap-2 text-white font-display font-bold text-base">
                 <Users className="w-4 h-4 text-cyan-400" />
@@ -435,14 +564,22 @@ export default function StudentsPage() {
                   onChange={(e) => setNewStudent({ ...newStudent, batchId: e.target.value })}
                   className="w-full p-2.5 rounded-xl bg-slate-900 border border-slate-700 text-white focus:outline-none focus:border-cyan-500"
                 >
-                  <option value="b_java_m1">Java Fullstack Morning (Alpha)</option>
-                  <option value="b_java_fast">Java Sprint Fast-Track</option>
-                  <option value="b_java_e1">Java Evening Pro</option>
-                  <option value="b_py_m2">Python Data Engineering</option>
-                  <option value="b_mern_e2">Modern MERN & Cloud</option>
-                  <option value="b_ai_w2">Weekend AI/ML Masterclass</option>
-                  <option value="b_iot_m3">Embedded Systems & IoT Lab</option>
-                  <option value="b_dbms_w1">Database Engineering Global</option>
+                  {availableBatches.length > 0 ? (
+                    availableBatches.map(b => (
+                      <option key={b.id} value={b.id}>{b.name}</option>
+                    ))
+                  ) : (
+                    <>
+                      <option value="b_java_m1">Java Fullstack Morning (Alpha)</option>
+                      <option value="b_java_fast">Java Sprint Fast-Track</option>
+                      <option value="b_java_e1">Java Evening Pro</option>
+                      <option value="b_py_m2">Python Data Engineering</option>
+                      <option value="b_mern_e2">Modern MERN & Cloud</option>
+                      <option value="b_ai_w2">Weekend AI/ML Masterclass</option>
+                      <option value="b_iot_m3">Embedded Systems & IoT Lab</option>
+                      <option value="b_dbms_w1">Database Engineering Global</option>
+                    </>
+                  )}
                 </select>
               </div>
 
@@ -464,6 +601,163 @@ export default function StudentsPage() {
                   className="px-4 py-2 rounded-xl bg-gradient-to-r from-cyan-500 to-violet-600 text-white font-medium shadow-neon-cyan hover:brightness-110"
                 >
                   {savingStudent ? 'Enrolling...' : 'Confirm Enrollment'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Student & Guardian Name Modal */}
+      {editingStudent && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm animate-in fade-in duration-150">
+          <div className="w-full max-w-lg rounded-2xl border border-slate-700 bg-command-darkest p-6 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <div className="flex items-center gap-2 text-white font-display font-bold text-base">
+                <Edit3 className="w-4 h-4 text-emerald-400" />
+                Edit Student Profile & Guardian Records
+              </div>
+              <button
+                onClick={() => setEditingStudent(null)}
+                className="text-slate-400 hover:text-white p-1 rounded-lg"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleUpdateStudent} className="space-y-3.5 text-xs">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-slate-300 block mb-1">Student Full Name *</label>
+                  <input
+                    type="text"
+                    required
+                    value={editingStudent.name}
+                    onChange={(e) => setEditingStudent({ ...editingStudent, name: e.target.value })}
+                    className="w-full p-2.5 rounded-xl bg-slate-900 border border-slate-700 text-white focus:outline-none focus:border-cyan-500"
+                  />
+                </div>
+                <div>
+                  <label className="text-slate-300 block mb-1">Official Email *</label>
+                  <input
+                    type="email"
+                    required
+                    value={editingStudent.email}
+                    onChange={(e) => setEditingStudent({ ...editingStudent, email: e.target.value })}
+                    className="w-full p-2.5 rounded-xl bg-slate-900 border border-slate-700 text-white focus:outline-none focus:border-cyan-500"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-slate-300 block mb-1">Student Phone *</label>
+                  <input
+                    type="text"
+                    required
+                    value={editingStudent.phone}
+                    onChange={(e) => setEditingStudent({ ...editingStudent, phone: e.target.value })}
+                    className="w-full p-2.5 rounded-xl bg-slate-900 border border-slate-700 text-white font-mono focus:outline-none focus:border-cyan-500"
+                  />
+                </div>
+                <div>
+                  <label className="text-slate-300 block mb-1">City</label>
+                  <input
+                    type="text"
+                    value={editingStudent.city}
+                    onChange={(e) => setEditingStudent({ ...editingStudent, city: e.target.value })}
+                    className="w-full p-2.5 rounded-xl bg-slate-900 border border-slate-700 text-white focus:outline-none focus:border-cyan-500"
+                  />
+                </div>
+              </div>
+
+              {/* GUARDIAN SECTION - HIGHLIGHTED */}
+              <div className="p-3.5 rounded-xl bg-violet-950/30 border border-violet-500/40 space-y-3">
+                <div className="flex items-center gap-1.5 text-xs font-semibold text-violet-300">
+                  <Shield className="w-3.5 h-3.5 text-violet-400" />
+                  Guardian Information (Emergency & Fee Contact)
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-slate-300 block mb-1">Guardian Full Name *</label>
+                    <input
+                      type="text"
+                      required
+                      placeholder="e.g. Mr. Ramesh Gupta"
+                      value={editingStudent.guardianName}
+                      onChange={(e) => setEditingStudent({ ...editingStudent, guardianName: e.target.value })}
+                      className="w-full p-2.5 rounded-xl bg-slate-900 border border-violet-500/60 text-white focus:outline-none focus:border-violet-400"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-slate-300 block mb-1">Guardian Phone (WhatsApp)</label>
+                    <input
+                      type="text"
+                      placeholder="+91 98200 00000"
+                      value={editingStudent.guardianPhone}
+                      onChange={(e) => setEditingStudent({ ...editingStudent, guardianPhone: e.target.value })}
+                      className="w-full p-2.5 rounded-xl bg-slate-900 border border-slate-700 text-white font-mono focus:outline-none focus:border-violet-400"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-slate-300 block mb-1">Cohort Batch</label>
+                  <select
+                    value={editingStudent.batchId}
+                    onChange={(e) => setEditingStudent({ ...editingStudent, batchId: e.target.value })}
+                    className="w-full p-2.5 rounded-xl bg-slate-900 border border-slate-700 text-white focus:outline-none focus:border-cyan-500"
+                  >
+                    {availableBatches.length > 0 ? (
+                      availableBatches.map(b => (
+                        <option key={b.id} value={b.id}>{b.name}</option>
+                      ))
+                    ) : (
+                      <>
+                        <option value="b_java_m1">Java Morning (Alpha)</option>
+                        <option value="b_java_fast">Java Fast-Track</option>
+                        <option value="b_java_e1">Java Evening Pro</option>
+                        <option value="b_py_m2">Python Data Eng</option>
+                        <option value="b_mern_e2">Modern MERN</option>
+                        <option value="b_ai_w2">Weekend AI/ML</option>
+                        <option value="b_iot_m3">IoT Hardware Lab</option>
+                        <option value="b_dbms_w1">Database Global</option>
+                      </>
+                    )}
+                  </select>
+                </div>
+                <div>
+                  <label className="text-slate-300 block mb-1">Enrollment Status</label>
+                  <select
+                    value={editingStudent.status}
+                    onChange={(e) => setEditingStudent({ ...editingStudent, status: e.target.value })}
+                    className="w-full p-2.5 rounded-xl bg-slate-900 border border-slate-700 text-white focus:outline-none focus:border-cyan-500"
+                  >
+                    <option value="active">Active Enrolled</option>
+                    <option value="completed">Completed / Graduated</option>
+                    <option value="dropped">Dropout / Inactive</option>
+                    <option value="on-leave">Medical / Academic Leave</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="pt-2 flex items-center justify-end gap-2 border-t border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => setEditingStudent(null)}
+                  className="px-4 py-2 rounded-xl bg-slate-800 text-slate-300 hover:text-white"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={savingEdit}
+                  className="px-4 py-2 rounded-xl bg-gradient-to-r from-emerald-500 to-cyan-500 text-white font-medium shadow-neon-cyan hover:brightness-110"
+                >
+                  {savingEdit ? 'Saving Changes...' : 'Save Student Details'}
                 </button>
               </div>
             </form>

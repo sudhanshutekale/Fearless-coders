@@ -3,9 +3,10 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
-    "dev": "next dev",
+    "dev": "next dev -H 0.0.0.0",
     "build": "next build",
-    "start": "next start",
+    "start": "next start -H 0.0.0.0 -p ${PORT:-3000}",
+    "postinstall": "npm rebuild better-sqlite3 --build-from-source",
     "lint": "next lint",
     "seed": "tsx src/lib/db/seed.ts",
     "test:rbac": "tsx src/scripts/test-rbac.ts"

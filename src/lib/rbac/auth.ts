@@ -54,6 +54,7 @@ export function authenticateDemoUser(role: UserRole): AuthUser {
       name: user.name,
       email: user.email,
       role: user.role as UserRole,
+      studentId: role === 'student' ? (demo.studentId || 's_001') : undefined,
       avatarUrl: user.avatar_url || demo.avatar
     };
   }
@@ -63,6 +64,7 @@ export function authenticateDemoUser(role: UserRole): AuthUser {
     name: demo.name,
     email: demo.email,
     role: demo.role,
+    studentId: role === 'student' ? (demo.studentId || 's_001') : undefined,
     avatarUrl: demo.avatar
   };
 }
@@ -85,6 +87,7 @@ export function authenticateUserById(userId: string): AuthUser {
     name: user.name,
     email: user.email,
     role: user.role as UserRole,
+    studentId: user.role === 'student' ? (demo?.studentId || 's_001') : undefined,
     avatarUrl: user.avatar_url || demo?.avatar || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150'
   };
 }

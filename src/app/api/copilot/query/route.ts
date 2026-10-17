@@ -297,7 +297,7 @@ function buildStudentResponse(student: any, role: UserRole) {
   let pendingEmi = 0;
   let overdueEmi = 0;
 
-  const canViewFees = role === 'owner' || role === 'accounts' || role === 'counselor';
+  const canViewFees = role === 'owner' || role === 'accounts' || role === 'counselor' || role === 'student';
   if (canViewFees) {
     const fee = db.prepare(`
       SELECT 
@@ -555,13 +555,34 @@ export async function POST(req: NextRequest) {
     const useMock = process.env.MOCK_LLM === 'true' || !process.env.GEMINI_API_KEY;
     let llmResponse: any;
 
-    // 0. Priority Student Dossier Matching (ensures instant 100% full detail retrieval by name, ID, or phone)
-    const studentMatch = findStudentByQuery(question);
-    if (studentMatch) {
-      if (studentMatch.type === 'single' && studentMatch.student) {
-        llmResponse = buildStudentResponse(studentMatch.student, user.role);
-      } else if (studentMatch.type === 'multiple' && studentMatch.students) {
-        llmResponse = buildMultipleStudentsResponse(studentMatch.students, user.role);
+    // 0. Priority Student Dossier Matching & Strict Student Role Isolation
+    if (user.role === 'student') {
+      const studentId = user.studentId || 's_001';
+      const studentMatch = findStudentByQuery(question);
+      if (studentMatch) {
+        const targetStudent = studentMatch.type === 'single' ? studentMatch.student : studentMatch.students?.[0];
+        if (targetStudent && targetStudent.id !== studentId) {
+          return NextResponse.json({
+            blocked: true,
+            blockedReason: `🛡️ **Access Denied (RBAC Policy Enforcement)**\n\nAs an enrolled student (${user.name}), you are restricted to viewing only your own personal records.\n\nQuerying other students' private records (${targetStudent.name}) is strictly blocked.`,
+            explanation: `🛡️ **Access Denied (RBAC Policy Enforcement)**\n\nAs an enrolled student (${user.name}), you are restricted to viewing only your own personal records.\n\nQuerying other students' private records is strictly blocked.`
+          });
+        }
+      }
+
+      const db = getDb();
+      const meStudent = db.prepare('SELECT id, name, phone, email FROM students WHERE id = ?').get(studentId) as any;
+      if (meStudent) {
+        llmResponse = buildStudentResponse(meStudent, 'student');
+      }
+    } else {
+      const studentMatch = findStudentByQuery(question);
+      if (studentMatch) {
+        if (studentMatch.type === 'single' && studentMatch.student) {
+          llmResponse = buildStudentResponse(studentMatch.student, user.role);
+        } else if (studentMatch.type === 'multiple' && studentMatch.students) {
+          llmResponse = buildMultipleStudentsResponse(studentMatch.students, user.role);
+        }
       }
     }
 

@@ -6,6 +6,7 @@ export const dynamic = 'force-dynamic';
 
 export async function GET(req: NextRequest) {
   try {
+    const user = await getSessionUser();
     const db = getDb();
     const searchParams = req.nextUrl.searchParams;
     const batchId = searchParams.get('batchId') || '';
@@ -29,10 +30,19 @@ export async function GET(req: NextRequest) {
       params.push(batchId);
     }
 
+    // If student, restrict to their enrolled batch
+    if (user.role === 'student') {
+      const studentId = user.studentId || 's_001';
+      query += ` AND b.id IN (SELECT batch_id FROM enrollments WHERE student_id = ?)`;
+      params.push(studentId);
+    }
+
     query += ` ORDER BY rec.date DESC, rec.created_at DESC LIMIT 50`;
 
     const recordings = db.prepare(query).all(...params);
-    const batches = db.prepare('SELECT id, name, course_id FROM batches ORDER BY name').all();
+    const batches = user.role === 'student'
+      ? db.prepare('SELECT b.id, b.name, b.course_id FROM batches b JOIN enrollments en ON en.batch_id = b.id WHERE en.student_id = ?').all(user.studentId || 's_001')
+      : db.prepare('SELECT id, name, course_id FROM batches ORDER BY name').all();
 
     return NextResponse.json({ recordings, batches });
   } catch (err: any) {
@@ -43,6 +53,9 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   try {
     const user = await getSessionUser();
+    if (user.role === 'student') {
+      return NextResponse.json({ error: 'Forbidden: Students cannot upload or publish class recordings.' }, { status: 403 });
+    }
     const body = await req.json();
     const { batchId, title, url, date, durationMinutes, topicTags } = body;
 

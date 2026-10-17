@@ -10,7 +10,7 @@ export async function POST(req: NextRequest) {
     let user;
     if (userId) {
       user = authenticateUserById(userId);
-    } else if (role && ['owner', 'counselor', 'trainer', 'accounts'].includes(role)) {
+    } else if (role && ['owner', 'counselor', 'trainer', 'accounts', 'student'].includes(role)) {
       user = authenticateDemoUser(role as UserRole);
     } else {
       return NextResponse.json({ error: 'Valid role or userId must be specified' }, { status: 400 });

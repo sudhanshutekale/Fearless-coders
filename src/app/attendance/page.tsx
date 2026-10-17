@@ -104,14 +104,14 @@ export default function AttendancePage() {
       </div>
 
       {/* Filter and Date Bar */}
-      <div className="p-4 rounded-2xl border border-slate-800 bg-slate-900/80 backdrop-blur-xl flex flex-wrap items-center justify-between gap-4">
-        <div className="flex items-center gap-3">
-          <div>
+      <div className="p-4 rounded-2xl border border-slate-800 bg-slate-900/80 backdrop-blur-xl flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4">
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
+          <div className="flex-1 sm:flex-initial">
             <label className="text-[10px] font-mono uppercase text-slate-400 block mb-1">Select Batch</label>
             <select
               value={selectedBatch}
               onChange={(e) => setSelectedBatch(e.target.value)}
-              className="py-2 px-3 rounded-xl bg-slate-950 border border-slate-800 text-xs text-slate-200 focus:outline-none focus:border-cyan-500"
+              className="w-full sm:w-auto py-2 px-3 rounded-xl bg-slate-950 border border-slate-800 text-xs text-slate-200 focus:outline-none focus:border-cyan-500"
             >
               {batches?.map((b: any) => (
                 <option key={b.id} value={b.id}>{b.name}</option>
@@ -119,26 +119,26 @@ export default function AttendancePage() {
             </select>
           </div>
 
-          <div>
+          <div className="flex-1 sm:flex-initial">
             <label className="text-[10px] font-mono uppercase text-slate-400 block mb-1">Date of Session</label>
             <input
               type="date"
               value={selectedDate}
               onChange={(e) => setSelectedDate(e.target.value)}
-              className="py-1.5 px-3 rounded-xl bg-slate-950 border border-slate-800 text-xs text-slate-200 font-mono focus:outline-none focus:border-cyan-500"
+              className="w-full sm:w-auto py-1.5 px-3 rounded-xl bg-slate-950 border border-slate-800 text-xs text-slate-200 font-mono focus:outline-none focus:border-cyan-500"
             />
           </div>
         </div>
 
         {/* Attendance Summary Counters */}
-        <div className="flex items-center gap-3 text-xs font-mono">
-          <div className="px-3 py-1.5 rounded-xl bg-emerald-950/60 border border-emerald-500/30 text-emerald-300">
+        <div className="flex flex-wrap items-center gap-2 sm:gap-3 text-xs font-mono">
+          <div className="flex-1 sm:flex-initial text-center px-3 py-1.5 rounded-xl bg-emerald-950/60 border border-emerald-500/30 text-emerald-300">
             Present: <span className="font-bold">{presentCount}</span>
           </div>
-          <div className="px-3 py-1.5 rounded-xl bg-rose-950/60 border border-rose-500/30 text-rose-300">
+          <div className="flex-1 sm:flex-initial text-center px-3 py-1.5 rounded-xl bg-rose-950/60 border border-rose-500/30 text-rose-300">
             Absent: <span className="font-bold">{absentCount}</span>
           </div>
-          <div className="px-3 py-1.5 rounded-xl bg-amber-950/60 border border-amber-500/30 text-amber-300">
+          <div className="flex-1 sm:flex-initial text-center px-3 py-1.5 rounded-xl bg-amber-950/60 border border-amber-500/30 text-amber-300">
             Late: <span className="font-bold">{lateCount}</span>
           </div>
         </div>
@@ -147,7 +147,7 @@ export default function AttendancePage() {
       {/* Attendance Table */}
       <div className="rounded-2xl border border-slate-800 bg-slate-900/80 backdrop-blur-xl overflow-hidden shadow-glass">
         <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs">
+          <table className="w-full text-left text-xs min-w-[680px]">
             <thead className="bg-slate-950/80 border-b border-slate-800 text-slate-400 font-mono text-[10px] uppercase">
               <tr>
                 <th className="py-3 px-4">Student</th>

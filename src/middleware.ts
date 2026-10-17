@@ -30,7 +30,36 @@ export function middleware(request: NextRequest) {
     }
   }
 
-  // 1. Audit Log is strictly Owner-only
+  // 1. Student Role Restrictions: Cannot access staff management, outbox, reconciliation, audit log, or all-students roster
+  if (userRole === 'student') {
+    if (
+      pathname.startsWith('/audit-log') ||
+      pathname.startsWith('/reconciliation') ||
+      pathname.startsWith('/outbox') ||
+      pathname.startsWith('/team') ||
+      pathname === '/students' ||
+      pathname.startsWith('/api/audit-log') ||
+      pathname.startsWith('/api/reconciliation') ||
+      pathname.startsWith('/api/outbox') ||
+      pathname.startsWith('/api/team') ||
+      pathname.startsWith('/api/users')
+    ) {
+      if (pathname.startsWith('/api/')) {
+        return NextResponse.json(
+          { error: 'Forbidden: Students are restricted from administrative and staff operations.' },
+          { status: 403 }
+        );
+      }
+      return NextResponse.redirect(new URL('/student-portal', request.url));
+    }
+
+    // Auto-redirect student from generic dashboard to student portal
+    if (pathname === '/dashboard') {
+      return NextResponse.redirect(new URL('/student-portal', request.url));
+    }
+  }
+
+  // 2. Audit Log is strictly Owner-only
   if (pathname.startsWith('/audit-log') || pathname.startsWith('/api/audit-log')) {
     if (userRole !== 'owner') {
       if (pathname.startsWith('/api/')) {
@@ -43,7 +72,7 @@ export function middleware(request: NextRequest) {
     }
   }
 
-  // 2. Fees & Reconciliation are restricted from Counselor and Trainer
+  // 3. Fees & Reconciliation are restricted from Counselor and Trainer
   if (
     pathname.startsWith('/fees') ||
     pathname.startsWith('/reconciliation') ||

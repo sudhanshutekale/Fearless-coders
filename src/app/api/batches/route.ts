@@ -34,6 +34,14 @@ export async function GET() {
       return NextResponse.json({ batches, courses, trainers, rooms });
     }
 
+    // If role is student, restrict to their enrolled batch
+    if (user.role === 'student') {
+      const studentId = user.studentId || 's_001';
+      query += ` JOIN enrollments en ON en.batch_id = b.id WHERE en.student_id = ?`;
+      const batches = db.prepare(query).all(studentId);
+      return NextResponse.json({ batches, courses, trainers, rooms });
+    }
+
     query += ` ORDER BY b.status ASC, b.start_time ASC`;
     const batches = db.prepare(query).all();
 
@@ -46,6 +54,9 @@ export async function GET() {
 export async function POST(req: NextRequest) {
   try {
     const user = await getSessionUser();
+    if (user.role === 'student') {
+      return NextResponse.json({ error: 'Forbidden: Students cannot schedule or create batches.' }, { status: 403 });
+    }
 
 
     const body = await req.json();

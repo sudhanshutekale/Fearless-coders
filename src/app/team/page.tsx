@@ -18,7 +18,8 @@ import {
   Sparkles,
   AlertCircle,
   ExternalLink,
-  LogIn
+  LogIn,
+  BookOpen
 } from 'lucide-react';
 import { UserRole } from '@/lib/rbac/permissions';
 
@@ -177,6 +178,18 @@ export default function TeamPage() {
           icon: <CreditCard className="w-3.5 h-3.5 text-amber-400" />,
           label: 'Accounts & Billing',
           className: 'bg-amber-950/60 text-amber-300 border-amber-500/40'
+        };
+      case 'student':
+        return {
+          icon: <BookOpen className="w-3.5 h-3.5 text-blue-400" />,
+          label: 'Enrolled Student',
+          className: 'bg-blue-950/60 text-blue-300 border-blue-500/40'
+        };
+      default:
+        return {
+          icon: <UserCheck className="w-3.5 h-3.5 text-slate-400" />,
+          label: (role as string) || 'Member',
+          className: 'bg-slate-900 text-slate-300 border-slate-700'
         };
     }
   };
@@ -380,7 +393,7 @@ export default function TeamPage() {
       {/* Add Member Modal */}
       {showAddModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md">
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-lg w-full p-6 shadow-2xl relative">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-lg w-full p-6 shadow-2xl relative max-h-[90vh] overflow-y-auto">
             <button
               onClick={() => setShowAddModal(false)}
               className="absolute top-4 right-4 text-slate-400 hover:text-white"

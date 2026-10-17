@@ -1,4 +1,4 @@
-import type { Metadata } from 'next';
+import type { Metadata, Viewport } from 'next';
 import './globals.css';
 import { getSessionUser } from '@/lib/rbac/auth';
 import AppShell from '@/components/layout/AppShell';
@@ -6,6 +6,13 @@ import AppShell from '@/components/layout/AppShell';
 export const metadata: Metadata = {
   title: 'InstiPilot — Institute Operations & AI Copilot',
   description: 'Autonomous operations platform for coaching institutes and training centres with an AST-guarded AI copilot at its core.',
+};
+
+export const viewport: Viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  maximumScale: 5,
+  themeColor: '#030712',
 };
 
 export const dynamic = 'force-dynamic';

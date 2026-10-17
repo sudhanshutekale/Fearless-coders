@@ -21,6 +21,29 @@ export async function GET(req: NextRequest) {
     const batchId = searchParams.get('batchId') || 'b_java_m1';
     const date = searchParams.get('date') || '2026-10-14';
 
+    // If student, scope strictly to only their record
+    if (user.role === 'student') {
+      const studentId = user.studentId || 's_001';
+      const studentBatch = db.prepare('SELECT batch_id FROM enrollments WHERE student_id = ? LIMIT 1').get(studentId) as any;
+      const effectiveBatchId = studentBatch?.batch_id || batchId;
+
+      const rows = db.prepare(`
+        SELECT 
+          s.id as student_id, s.name as student_name, s.phone as student_phone,
+          en.preferred_mode,
+          a.id as attendance_id, a.mode as checkin_mode, a.check_in_time, a.status as attendance_status,
+          a.ip_or_location
+        FROM enrollments en
+        JOIN students s ON s.id = en.student_id
+        LEFT JOIN attendance a ON a.student_id = s.id AND a.batch_id = en.batch_id AND a.date = ?
+        WHERE en.batch_id = ? AND s.id = ?
+        ORDER BY s.name ASC
+      `).all(date, effectiveBatchId, studentId);
+
+      const batches = db.prepare('SELECT id, name, mode FROM batches WHERE id = ?').all(effectiveBatchId);
+      return NextResponse.json({ rows, batches, selectedBatchId: effectiveBatchId, selectedDate: date });
+    }
+
     // Fetch batch students and their attendance status on that date
     const rows = db.prepare(`
       SELECT 
@@ -46,8 +69,8 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   try {
     const user = await getSessionUser();
-    if (user.role === 'accounts') {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    if (user.role === 'accounts' || user.role === 'student') {
+      return NextResponse.json({ error: 'Forbidden: Attendance mark or override is restricted to academic staff.' }, { status: 403 });
     }
 
     const body = await req.json();

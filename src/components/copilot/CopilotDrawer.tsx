@@ -191,6 +191,12 @@ export default function CopilotDrawer({ isOpen, onClose, currentUser }: CopilotD
       "List all pending and overdue EMIs due in the next 7 days.",
       "Show total fee collected this month grouped by payment method (UPI vs Bank).",
       "Which students have consecutive overdue installments?"
+    ],
+    student: [
+      "What is my current attendance percentage and recent logs?",
+      "When is my next fee installment due and how do I pay?",
+      "What is my class schedule and timetable for this week?",
+      "How do I access recordings and assignments for my batch?"
     ]
   };
 
@@ -288,11 +294,11 @@ export default function CopilotDrawer({ isOpen, onClose, currentUser }: CopilotD
 
   return (
     <div className="fixed inset-0 z-50 flex justify-end bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
-      {/* Background click to dismiss */}
-      <div className="flex-1" onClick={onClose} />
+      {/* Background click to dismiss on desktop */}
+      <div className="hidden sm:block flex-1" onClick={onClose} />
 
       {/* Drawer Container */}
-      <div className="w-full max-w-xl h-full bg-command-darkest border-l border-slate-800 shadow-2xl flex flex-col justify-between animate-in slide-in-from-right duration-300">
+      <div className="w-full sm:max-w-xl h-full bg-command-darkest border-l border-slate-800 shadow-2xl flex flex-col justify-between animate-in slide-in-from-right duration-300">
         {/* Drawer Header */}
         <div className="px-5 py-4 border-b border-slate-800 flex items-center justify-between bg-slate-950/70">
           <div className="flex items-center gap-2.5">

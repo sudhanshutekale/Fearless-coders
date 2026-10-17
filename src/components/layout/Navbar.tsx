@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { useRouter, usePathname } from 'next/navigation';
 import { 
   ShieldCheck, 
   Sparkles, 
@@ -15,7 +15,10 @@ import {
   Crown,
   Bell,
   Search,
-  Check
+  Check,
+  Menu,
+  X,
+  BookOpen
 } from 'lucide-react';
 import { UserRole, ROLE_PERMISSIONS } from '@/lib/rbac/permissions';
 import { DEMO_USERS, AuthUser } from '@/lib/rbac/user-types';
@@ -23,10 +26,20 @@ import { DEMO_USERS, AuthUser } from '@/lib/rbac/user-types';
 interface NavbarProps {
   currentUser: AuthUser;
   onOpenCopilot: () => void;
+  onToggleMobileNav?: () => void;
+  isMobileNavOpen?: boolean;
+  onRoleChange?: (newUser: AuthUser) => void;
 }
 
-export default function Navbar({ currentUser, onOpenCopilot }: NavbarProps) {
+export default function Navbar({ 
+  currentUser, 
+  onOpenCopilot, 
+  onToggleMobileNav, 
+  isMobileNavOpen,
+  onRoleChange
+}: NavbarProps) {
   const router = useRouter();
+  const pathname = usePathname();
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [switching, setSwitching] = useState(false);
 
@@ -45,20 +58,47 @@ export default function Navbar({ currentUser, onOpenCopilot }: NavbarProps) {
   }, [onOpenCopilot]);
 
   const switchRole = async (targetRole: UserRole) => {
+    if (targetRole === currentUser.role) {
+      setDropdownOpen(false);
+      return;
+    }
+
     setSwitching(true);
+    setDropdownOpen(false);
+
+    const demo = DEMO_USERS[targetRole];
+    const newUser: AuthUser = {
+      id: targetRole === 'student' ? 'u_student' : `u_${targetRole}`,
+      name: demo.name,
+      email: demo.email,
+      role: targetRole,
+      studentId: demo.studentId,
+      avatarUrl: demo.avatar
+    };
+
+    // 1. Instantly set session cookie synchronously on client
+    document.cookie = `instipilot_session=${encodeURIComponent(JSON.stringify(newUser))}; path=/; max-age=604800; SameSite=Lax`;
+
+    // 2. Notify parent state for instant zero-lag UI reaction
+    onRoleChange?.(newUser);
+
+    // 3. Instant client route transition without full window reload
+    if (targetRole === 'student') {
+      router.push('/student-portal');
+    } else if (pathname === '/student-portal') {
+      router.push('/dashboard');
+    }
+
+    // 4. Background server sync & cache refresh
     try {
-      const res = await fetch('/api/auth/demo-login', {
+      await fetch('/api/auth/demo-login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ role: targetRole }),
       });
-      if (res.ok) {
-        setDropdownOpen(false);
-        router.refresh();
-        window.location.reload();
-      }
+      router.refresh();
     } catch (e) {
-      console.error('Failed to switch role', e);
+      console.error('Failed to sync role session', e);
     } finally {
       setSwitching(false);
     }
@@ -68,15 +108,26 @@ export default function Navbar({ currentUser, onOpenCopilot }: NavbarProps) {
     owner: <Crown className="w-4 h-4 text-emerald-400" />,
     counselor: <UserCheck className="w-4 h-4 text-cyan-400" />,
     trainer: <GraduationCap className="w-4 h-4 text-violet-400" />,
-    accounts: <CreditCard className="w-4 h-4 text-amber-400" />
+    accounts: <CreditCard className="w-4 h-4 text-amber-400" />,
+    student: <BookOpen className="w-4 h-4 text-blue-400" />
   };
 
   return (
     <header className="sticky top-0 z-40 w-full border-b border-slate-800/80 bg-command-darkest/85 backdrop-blur-md">
       <div className="flex h-16 items-center justify-between px-4 sm:px-6">
         {/* Brand Logo & Name */}
-        <div className="flex items-center gap-3">
-          <Link href="/dashboard" className="flex items-center gap-2 group">
+        <div className="flex items-center gap-2 sm:gap-3">
+          {onToggleMobileNav && (
+            <button
+              onClick={onToggleMobileNav}
+              className="md:hidden p-2 -ml-1 rounded-xl bg-slate-900 border border-slate-800 text-slate-300 hover:text-white hover:border-slate-700 transition-colors focus:outline-none"
+              aria-label="Toggle navigation menu"
+            >
+              {isMobileNavOpen ? <X className="w-5 h-5 text-cyan-400" /> : <Menu className="w-5 h-5" />}
+            </button>
+          )}
+
+          <Link href={currentUser.role === 'student' ? '/student-portal' : '/dashboard'} className="flex items-center gap-2 group">
             <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-cyan-500 to-violet-600 flex items-center justify-center shadow-neon-cyan group-hover:scale-105 transition-transform">
               <Sparkles className="w-5 h-5 text-white" />
             </div>

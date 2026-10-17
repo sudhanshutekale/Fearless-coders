@@ -145,7 +145,7 @@ export default function FeesPage() {
       </div>
 
       {/* Tabs */}
-      <div className="flex items-center gap-2 border-b border-slate-800 pb-2 text-xs font-mono">
+      <div className="flex items-center gap-2 border-b border-slate-800 pb-2 text-xs font-mono overflow-x-auto whitespace-nowrap">
         <button
           onClick={() => setActiveTab('overdue')}
           className={`py-1.5 px-3 rounded-lg transition-all ${
@@ -184,7 +184,7 @@ export default function FeesPage() {
           <div className="py-12 text-center text-slate-500 text-xs">Loading ledger...</div>
         ) : activeTab === 'overdue' ? (
           <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs">
+            <table className="w-full text-left text-xs min-w-[650px]">
               <thead className="bg-slate-950/80 border-b border-slate-800 text-slate-400 font-mono text-[10px] uppercase">
                 <tr>
                   <th className="py-3 px-4">Student</th>
@@ -238,7 +238,7 @@ export default function FeesPage() {
           </div>
         ) : activeTab === 'upcoming' ? (
           <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs">
+            <table className="w-full text-left text-xs min-w-[650px]">
               <thead className="bg-slate-950/80 border-b border-slate-800 text-slate-400 font-mono text-[10px] uppercase">
                 <tr>
                   <th className="py-3 px-4">Student</th>
@@ -279,7 +279,7 @@ export default function FeesPage() {
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs">
+            <table className="w-full text-left text-xs min-w-[650px]">
               <thead className="bg-slate-950/80 border-b border-slate-800 text-slate-400 font-mono text-[10px] uppercase">
                 <tr>
                   <th className="py-3 px-4">Student</th>
@@ -314,7 +314,7 @@ export default function FeesPage() {
       {/* Record Payment Modal */}
       {showPayModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm animate-in fade-in duration-150">
-          <div className="w-full max-w-md rounded-2xl border border-slate-700 bg-command-darkest p-6 shadow-2xl space-y-4">
+          <div className="w-full max-w-md rounded-2xl border border-slate-700 bg-command-darkest p-6 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between border-b border-slate-800 pb-3">
               <div className="text-white font-display font-bold text-base">
                 Record Payment for {selectedEmi?.student_name}
