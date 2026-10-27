@@ -13,6 +13,8 @@
   },
   "dependencies": {
     "@google/generative-ai": "^0.21.0",
+    "@supabase/server": "^1.4.1",
+    "@supabase/supabase-js": "^2.109.0",
     "better-sqlite3": "^11.8.1",
     "clsx": "^2.1.1",
     "framer-motion": "^11.18.2",
@@ -22,13 +24,15 @@
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "recharts": "^2.15.1",
-    "tailwind-merge": "^2.6.0"
+    "tailwind-merge": "^2.6.0",
+    "ws": "^8.22.0"
   },
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.12",
     "@types/node": "^20.17.19",
     "@types/react": "^18.3.18",
     "@types/react-dom": "^18.3.5",
+    "@types/ws": "^8.18.2",
     "eslint": "^8.57.1",
     "eslint-config-next": "14.2.23",
     "postcss": "^8.4.49",

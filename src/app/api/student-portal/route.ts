@@ -1,18 +1,128 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
 import { getSessionUser } from '@/lib/rbac/auth';
+import { getSupabase, isSupabaseConfigured } from '@/lib/supabase';
 
 export const dynamic = 'force-dynamic';
 
 export async function GET(req: NextRequest) {
   try {
     const user = await getSessionUser();
-    const db = getDb();
-
-    // Default to s_001 (Aarav Gupta) if student role or fallback
     const studentId = user.studentId || 's_001';
 
-    // 1. Student Profile
+    // 1. Try Supabase Cloud
+    if (isSupabaseConfigured()) {
+      const client = getSupabase();
+      if (client) {
+        const [
+          stRes,
+          enrRes,
+          attRes,
+          feeRes,
+          emiRes,
+          payRes,
+          proofRes
+        ] = await Promise.all([
+          client.from('students').select('*').eq('id', studentId).single(),
+          client.from('enrollments').select(`
+            id, preferred_mode, enrolled_at, batch_id,
+            batches (
+              id, name, days, start_time, end_time, mode, start_date, end_date,
+              courses ( id, code, name, duration_weeks, total_fee ),
+              trainers ( name, email, phone ),
+              rooms ( name, type )
+            )
+          `).eq('student_id', studentId).limit(1).maybeSingle(),
+          client.from('attendance').select('*').eq('student_id', studentId).order('date', { ascending: false }),
+          client.from('fee_plans').select('*').eq('student_id', studentId).limit(1).maybeSingle(),
+          client.from('emi_installments').select('*').eq('student_id', studentId).order('installment_no', { ascending: true }),
+          client.from('payments').select('*').eq('student_id', studentId).order('date', { ascending: false }),
+          client.from('payment_proofs').select('*').eq('student_id', studentId).order('created_at', { ascending: false })
+        ]);
+
+        if (stRes.data) {
+          const student = stRes.data;
+          const enr: any = enrRes.data;
+          const batch = Array.isArray(enr?.batches) ? enr?.batches[0] : enr?.batches;
+          const course = Array.isArray(batch?.courses) ? batch?.courses[0] : batch?.courses;
+          const trainer = Array.isArray(batch?.trainers) ? batch?.trainers[0] : batch?.trainers;
+          const room = Array.isArray(batch?.rooms) ? batch?.rooms[0] : batch?.rooms;
+
+          const attendanceLogs = attRes.data || [];
+          const totalAtt = attendanceLogs.length;
+          const presentAtt = attendanceLogs.filter((a: any) => a.status === 'present').length;
+          const absentAtt = attendanceLogs.filter((a: any) => a.status === 'absent').length;
+          const lateAtt = attendanceLogs.filter((a: any) => a.status === 'late').length;
+          const attRate = totalAtt > 0 ? Math.round((presentAtt / totalAtt) * 100) : 100;
+
+          // Fetch schedule and recordings for batch
+          let schedule: any[] = [];
+          let recordings: any[] = [];
+          if (batch?.id) {
+            const [schedRes, recRes] = await Promise.all([
+              client.from('timetable_slots').select('id, day_of_week, start_time, end_time, room_id, notes').eq('batch_id', batch.id),
+              client.from('recordings').select('*').eq('batch_id', batch.id).order('date', { ascending: false }).limit(6)
+            ]);
+            schedule = (schedRes.data || []).map((s: any) => ({
+              id: s.id,
+              day: s.day_of_week,
+              start_time: s.start_time,
+              end_time: s.end_time,
+              room_id: s.room_id,
+              topic: s.notes
+            }));
+            recordings = recRes.data || [];
+          }
+
+          return NextResponse.json({
+            student,
+            enrollment: enr ? {
+              enrollment_id: enr.id,
+              preferred_mode: enr.preferred_mode,
+              enrolled_at: enr.enrolled_at,
+              batch_id: batch?.id,
+              batch_name: batch?.name,
+              days: batch?.days,
+              start_time: batch?.start_time,
+              end_time: batch?.end_time,
+              batch_mode: batch?.mode,
+              start_date: batch?.start_date,
+              end_date: batch?.end_date,
+              course_id: course?.id,
+              course_code: course?.code,
+              course_name: course?.name,
+              duration_weeks: course?.duration_weeks,
+              total_fee: course?.total_fee,
+              trainer_name: trainer?.name,
+              trainer_email: trainer?.email,
+              trainer_phone: trainer?.phone,
+              room_name: room?.name,
+              room_type: room?.type
+            } : null,
+            attendance: {
+              rate: attRate,
+              totalSessions: totalAtt,
+              present: presentAtt,
+              absent: absentAtt,
+              late: lateAtt,
+              recentLogs: attendanceLogs.slice(0, 15)
+            },
+            financials: {
+              feePlan: feeRes.data || null,
+              installments: emiRes.data || [],
+              payments: payRes.data || [],
+              proofs: proofRes.data || []
+            },
+            schedule,
+            recordings,
+            assignments: []
+          });
+        }
+      }
+    }
+
+    // 2. Fallback to SQLite
+    const db = getDb();
     const student = db.prepare(`
       SELECT 
         s.id, s.name, s.email, s.phone, s.guardian_name, s.guardian_phone,
@@ -25,7 +135,6 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: 'Student record not found.' }, { status: 404 });
     }
 
-    // 2. Enrolled Batch & Course Details
     const enrollment = db.prepare(`
       SELECT 
         en.id as enrollment_id, en.preferred_mode, en.enrolled_at,
@@ -43,7 +152,6 @@ export async function GET(req: NextRequest) {
       LIMIT 1
     `).get(studentId) as any;
 
-    // 3. Attendance Metrics & History
     const attendanceLogs = db.prepare(`
       SELECT id, date, mode, check_in_time, status, ip_or_location
       FROM attendance
@@ -66,7 +174,6 @@ export async function GET(req: NextRequest) {
       ? Math.round((totalSessions.present / totalSessions.total) * 100)
       : 100;
 
-    // 4. Fees & Installments
     const feePlan = db.prepare(`
       SELECT id, total_amount, down_payment, num_installments, discount
       FROM fee_plans
@@ -95,7 +202,6 @@ export async function GET(req: NextRequest) {
       ORDER BY created_at DESC
     `).all(studentId) as any[];
 
-    // 5. Timetable Schedule for Batch
     let schedule: any[] = [];
     if (enrollment?.batch_id) {
       schedule = db.prepare(`
@@ -116,7 +222,6 @@ export async function GET(req: NextRequest) {
       `).all(enrollment.batch_id);
     }
 
-    // 6. Recordings for Batch
     let recordings: any[] = [];
     if (enrollment?.batch_id) {
       recordings = db.prepare(`
@@ -128,16 +233,13 @@ export async function GET(req: NextRequest) {
       `).all(enrollment.batch_id);
     }
 
-    // 7. Assignments & Submissions
     let assignments: any[] = [];
     if (enrollment?.batch_id) {
       assignments = db.prepare(`
-        SELECT 
-          a.id, a.title, a.description, a.due_date, a.max_marks,
-          s.id as submission_id, s.submitted_at, s.status as submission_status,
-          s.marks, s.feedback
+        SELECT a.id, a.title, a.description, a.due_date, a.max_marks,
+               sub.id as submission_id, sub.status as sub_status, sub.marks as marks_awarded, sub.feedback
         FROM assignments a
-        LEFT JOIN submissions s ON s.assignment_id = a.id AND s.student_id = ?
+        LEFT JOIN submissions sub ON sub.assignment_id = a.id AND sub.student_id = ?
         WHERE a.batch_id = ?
         ORDER BY a.due_date DESC
       `).all(studentId, enrollment.batch_id);
@@ -148,11 +250,14 @@ export async function GET(req: NextRequest) {
       enrollment,
       attendance: {
         rate: attRate,
-        summary: totalSessions,
-        logs: attendanceLogs
+        totalSessions: totalSessions.total,
+        present: totalSessions.present,
+        absent: totalSessions.absent,
+        late: totalSessions.late,
+        recentLogs: attendanceLogs
       },
-      fees: {
-        plan: feePlan,
+      financials: {
+        feePlan,
         installments,
         payments,
         proofs

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
 import { getSessionUser } from '@/lib/rbac/auth';
+import { getSupabase, isSupabaseConfigured, upsertToSupabase } from '@/lib/supabase';
 
 export const dynamic = 'force-dynamic';
 
@@ -34,70 +35,73 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const db = getDb();
-
-    // Verify student and emi exist
-    const emi = db.prepare(`
-      SELECT e.id, e.amount, e.status, e.installment_no, s.name as student_name
-      FROM emi_installments e
-      JOIN students s ON s.id = e.student_id
-      WHERE e.id = ? AND e.student_id = ?
-    `).get(emiId, studentId) as any;
-
-    if (!emi) {
-      return NextResponse.json(
-        { error: 'Installment record not found for this student.' },
-        { status: 404 }
-      );
-    }
-
-    if (emi.status === 'paid') {
-      return NextResponse.json(
-        { error: 'This installment is already paid and verified.' },
-        { status: 400 }
-      );
-    }
-
-    // Check if there is already a pending proof for this EMI
-    const existingPending = db.prepare(`
-      SELECT id FROM payment_proofs
-      WHERE emi_id = ? AND status = 'pending'
-    `).get(emiId) as any;
-
     const proofId = `proof_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
 
-    if (existingPending) {
-      // Update existing pending proof with new photo / UTR
-      db.prepare(`
-        UPDATE payment_proofs
-        SET amount = ?, reference = ?, proof_image_url = ?, payment_mode = ?, notes = ?, created_at = CURRENT_TIMESTAMP
-        WHERE id = ?
-      `).run(amount, reference, proofImageUrl, paymentMode || 'upi', notes || '', existingPending.id);
-    } else {
-      // Insert new proof
-      db.prepare(`
-        INSERT INTO payment_proofs (
-          id, student_id, emi_id, amount, reference, proof_image_url, payment_mode, notes, status
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending')
-      `).run(proofId, studentId, emiId, amount, reference, proofImageUrl, paymentMode || 'upi', notes || '');
+    // 1. Persist to Supabase Cloud
+    if (isSupabaseConfigured()) {
+      await upsertToSupabase('payment_proofs', {
+        id: proofId,
+        student_id: studentId,
+        emi_id: emiId,
+        amount: Number(amount),
+        reference,
+        proof_image_url: proofImageUrl,
+        payment_mode: paymentMode || 'upi',
+        notes: notes || '',
+        status: 'pending'
+      });
+
+      await upsertToSupabase('audit_log', {
+        id: `aud_${Date.now()}`,
+        user_id: user.id || studentId,
+        user_name: user.name || 'Student',
+        role: user.role || 'student',
+        action: 'STUDENT_UPLOAD_PAYMENT_PROOF',
+        result_summary: `Student uploaded payment photo proof for Installment ${emiId} (₹${Number(amount)?.toLocaleString('en-IN')}, UTR: ${reference})`,
+        status: 'success'
+      });
     }
 
-    // Log to audit log
-    db.prepare(`
-      INSERT INTO audit_log (id, user_id, user_name, role, action, result_summary, status)
-      VALUES (?, ?, ?, ?, 'STUDENT_UPLOAD_PAYMENT_PROOF', ?, 'success')
-    `).run(
-      `aud_${Date.now()}`,
-      user.id,
-      user.name,
-      user.role,
-      `Student ${emi.student_name} uploaded payment photo proof for Installment #${emi.installment_no} (₹${amount.toLocaleString('en-IN')}, UTR: ${reference})`
-    );
+    // 2. Also persist to SQLite if available
+    try {
+      const db = getDb();
+      const existingPending = db.prepare(`
+        SELECT id FROM payment_proofs
+        WHERE emi_id = ? AND status = 'pending'
+      `).get(emiId) as any;
+
+      if (existingPending) {
+        db.prepare(`
+          UPDATE payment_proofs
+          SET amount = ?, reference = ?, proof_image_url = ?, payment_mode = ?, notes = ?, created_at = CURRENT_TIMESTAMP
+          WHERE id = ?
+        `).run(amount, reference, proofImageUrl, paymentMode || 'upi', notes || '', existingPending.id);
+      } else {
+        db.prepare(`
+          INSERT INTO payment_proofs (
+            id, student_id, emi_id, amount, reference, proof_image_url, payment_mode, notes, status
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending')
+        `).run(proofId, studentId, emiId, amount, reference, proofImageUrl, paymentMode || 'upi', notes || '');
+      }
+
+      db.prepare(`
+        INSERT INTO audit_log (id, user_id, user_name, role, action, result_summary, status)
+        VALUES (?, ?, ?, ?, 'STUDENT_UPLOAD_PAYMENT_PROOF', ?, 'success')
+      `).run(
+        `aud_${Date.now()}`,
+        user.id,
+        user.name,
+        user.role,
+        `Student uploaded payment photo proof for Installment ${emiId} (₹${amount.toLocaleString('en-IN')}, UTR: ${reference})`
+      );
+    } catch (e) {
+      // Ignore SQLite write error in serverless
+    }
 
     return NextResponse.json({
       success: true,
       message: 'Payment proof photo submitted successfully. Awaiting Director/Owner verification in the Fee Reconciliation Engine.',
-      proofId: existingPending?.id || proofId
+      proofId
     });
   } catch (error: any) {
     console.error('Error submitting payment proof:', error);

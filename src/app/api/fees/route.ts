@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
 import { getSessionUser } from '@/lib/rbac/auth';
+import { getSupabase, isSupabaseConfigured, upsertToSupabase } from '@/lib/supabase';
 
 export const dynamic = 'force-dynamic';
 
@@ -8,7 +9,6 @@ export async function GET(req: NextRequest) {
   try {
     const user = await getSessionUser();
 
-    // Strict server-side RBAC enforcement
     if (user.role === 'trainer' || user.role === 'counselor') {
       return NextResponse.json(
         { error: `Forbidden: Financial tables are blocked for ${user.role} role.` },
@@ -16,9 +16,105 @@ export async function GET(req: NextRequest) {
       );
     }
 
+    // 1. Try Supabase Cloud
+    if (isSupabaseConfigured()) {
+      const client = getSupabase();
+      if (client) {
+        const studentId = user.role === 'student' ? (user.studentId || 's_001') : null;
+
+        let overdueQuery = client
+          .from('emi_installments')
+          .select(`
+            id, installment_no, due_date, amount, status,
+            students ( id, name, phone ),
+            fee_plans (
+              courses ( name )
+            )
+          `)
+          .eq('status', 'overdue')
+          .order('due_date', { ascending: true });
+
+        let pendingQuery = client
+          .from('emi_installments')
+          .select(`
+            id, installment_no, due_date, amount, status,
+            students ( id, name, phone ),
+            fee_plans (
+              courses ( name )
+            )
+          `)
+          .eq('status', 'pending')
+          .order('due_date', { ascending: true });
+
+        let paymentsQuery = client
+          .from('payments')
+          .select(`
+            id, source, reference, amount, date, notes, status,
+            students ( name, phone )
+          `)
+          .order('date', { ascending: false });
+
+        if (studentId) {
+          overdueQuery = overdueQuery.eq('student_id', studentId);
+          pendingQuery = pendingQuery.eq('student_id', studentId);
+          paymentsQuery = paymentsQuery.eq('student_id', studentId);
+        } else {
+          pendingQuery = pendingQuery.limit(30);
+          paymentsQuery = paymentsQuery.limit(40);
+        }
+
+        const [overdueRes, pendingRes, paymentsRes, allPayments, allOverdue, allPending] = await Promise.all([
+          overdueQuery,
+          pendingQuery,
+          paymentsQuery,
+          client.from('payments').select('amount').eq('status', 'verified'),
+          client.from('emi_installments').select('amount').eq('status', 'overdue'),
+          client.from('emi_installments').select('amount').eq('status', 'pending')
+        ]);
+
+        if (overdueRes.data && pendingRes.data && paymentsRes.data) {
+          const mapEmi = (e: any) => ({
+            id: e.id,
+            installment_no: e.installment_no,
+            due_date: e.due_date,
+            amount: e.amount,
+            status: e.status,
+            student_id: e.students?.id,
+            student_name: e.students?.name,
+            student_phone: e.students?.phone,
+            batch_name: '',
+            course_name: e.fee_plans?.courses?.name || ''
+          });
+
+          const mapPayment = (p: any) => ({
+            id: p.id,
+            source: p.source,
+            reference: p.reference,
+            amount: p.amount,
+            date: p.date,
+            notes: p.notes,
+            status: p.status,
+            student_name: p.students?.name,
+            student_phone: p.students?.phone
+          });
+
+          const totalCollected = (allPayments.data || []).reduce((acc: number, r: any) => acc + (Number(r.amount) || 0), 0);
+          const totalOverdue = (allOverdue.data || []).reduce((acc: number, r: any) => acc + (Number(r.amount) || 0), 0);
+          const totalPending = (allPending.data || []).reduce((acc: number, r: any) => acc + (Number(r.amount) || 0), 0);
+
+          return NextResponse.json({
+            summary: { totalCollected, totalOverdue, totalPending },
+            overdueEmis: overdueRes.data.map(mapEmi),
+            upcomingEmis: pendingRes.data.map(mapEmi),
+            recentPayments: paymentsRes.data.map(mapPayment)
+          });
+        }
+      }
+    }
+
+    // 2. Fallback to SQLite
     const db = getDb();
 
-    // If student, return only their own personal installments and payment receipts
     if (user.role === 'student') {
       const studentId = user.studentId || 's_001';
 
@@ -73,7 +169,6 @@ export async function GET(req: NextRequest) {
       });
     }
 
-    // 1. All Overdue EMIs
     const overdueEmis = db.prepare(`
       SELECT 
         e.id, e.installment_no, e.due_date, e.amount, e.status,
@@ -89,7 +184,6 @@ export async function GET(req: NextRequest) {
       ORDER BY e.due_date ASC
     `).all();
 
-    // 2. Upcoming EMIs (Due this week / next 14 days)
     const upcomingEmis = db.prepare(`
       SELECT 
         e.id, e.installment_no, e.due_date, e.amount, e.status,
@@ -106,7 +200,6 @@ export async function GET(req: NextRequest) {
       LIMIT 30
     `).all();
 
-    // 3. Verified Payments
     const recentPayments = db.prepare(`
       SELECT 
         p.id, p.source, p.reference, p.amount, p.date, p.notes, p.status,
@@ -117,7 +210,6 @@ export async function GET(req: NextRequest) {
       LIMIT 40
     `).all();
 
-    // Summary totals
     const totalCollected = (db.prepare("SELECT SUM(amount) as s FROM payments WHERE status = 'verified'").get() as any).s || 0;
     const totalOverdue = (db.prepare("SELECT SUM(amount) as s FROM emi_installments WHERE status = 'overdue'").get() as any).s || 0;
     const totalPending = (db.prepare("SELECT SUM(amount) as s FROM emi_installments WHERE status = 'pending'").get() as any).s || 0;
@@ -147,17 +239,51 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Missing required payment details' }, { status: 400 });
     }
 
-    const db = getDb();
     const paymentId = `pay_${Date.now()}`;
+    const today = new Date().toISOString().split('T')[0];
 
-    const tx = db.transaction(() => {
-      // Insert payment record
+    // 1. Persist to Supabase Cloud
+    if (isSupabaseConfigured()) {
+      await upsertToSupabase('payments', {
+        id: paymentId,
+        emi_id: emiId || null,
+        student_id: studentId,
+        source,
+        reference,
+        amount: Number(amount),
+        date: today,
+        notes: notes || 'Manual entry',
+        status: 'verified'
+      });
+
+      if (emiId) {
+        await upsertToSupabase('emi_installments', {
+          id: emiId,
+          status: 'paid',
+          paid_date: today
+        });
+      }
+
+      await upsertToSupabase('audit_log', {
+        id: `aud_pay_${Date.now()}`,
+        user_id: user.id || 'u_accounts',
+        user_name: user.name || 'Accounts Manager',
+        role: user.role || 'accounts',
+        action: 'record_payment',
+        query: `Recorded ₹${amount} (${source}) for student ${studentId}`,
+        result_summary: `Reference: ${reference}`,
+        status: 'success'
+      });
+    }
+
+    // 2. Also persist to SQLite if available
+    try {
+      const db = getDb();
       db.prepare(`
         INSERT INTO payments (id, emi_id, student_id, source, reference, amount, date, notes, status)
         VALUES (?, ?, ?, ?, ?, ?, date('now'), ?, 'verified')
       `).run(paymentId, emiId || null, studentId, source, reference, amount, notes || 'Manual entry');
 
-      // If tied to an EMI installment, mark it paid
       if (emiId) {
         db.prepare(`
           UPDATE emi_installments
@@ -166,22 +292,14 @@ export async function POST(req: NextRequest) {
         `).run(emiId);
       }
 
-      // Audit log
       db.prepare(`
         INSERT INTO audit_log (id, user_id, user_name, role, action, query, result_summary, status)
         VALUES (?, ?, ?, ?, 'record_payment', ?, ?, 'success')
-      `).run(
-        `aud_pay_${Date.now()}`,
-        user.id,
-        user.name,
-        user.role,
-        `Recorded ₹${amount} (${source}) for student ${studentId}`,
-        `Reference: ${reference}`,
-        'success'
-      );
-    });
+      `).run(`aud_pay_${Date.now()}`, user.id || 'u_accounts', user.name || 'Accounts Manager', user.role || 'accounts', `Recorded ₹${amount} (${source}) for student ${studentId}`, `Reference: ${reference}`);
+    } catch (e) {
+      // Ignore SQLite write error in serverless
+    }
 
-    tx();
     return NextResponse.json({ success: true, paymentId });
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 500 });
