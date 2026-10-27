@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getDb } from '@/lib/db';
 import { getSessionUser } from '@/lib/rbac/auth';
 import { ROLE_PERMISSIONS, UserRole } from '@/lib/rbac/permissions';
 import { validateSqlQuery, executeSafeQuery } from '@/lib/rbac/query-guard';

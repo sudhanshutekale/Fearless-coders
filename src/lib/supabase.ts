@@ -1,15 +1,15 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import WebSocket from 'ws';
 
-const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://bpjejfgxqrydrfumaoek.supabase.co';
-const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY || '';
-
 let _supabaseClient: SupabaseClient | null = null;
 
 export function getSupabase(): SupabaseClient | null {
-  if (!SUPABASE_KEY || !SUPABASE_URL) return null;
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
+
+  if (!supabaseKey || !supabaseUrl) return null;
   if (!_supabaseClient) {
-    _supabaseClient = createClient(SUPABASE_URL, SUPABASE_KEY, {
+    _supabaseClient = createClient(supabaseUrl, supabaseKey, {
       auth: { persistSession: false },
       realtime: { transport: WebSocket as any },
     });
@@ -18,7 +18,9 @@ export function getSupabase(): SupabaseClient | null {
 }
 
 export const isSupabaseConfigured = (): boolean => {
-  return Boolean(SUPABASE_URL && SUPABASE_KEY);
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
+  return Boolean(supabaseUrl && supabaseKey);
 };
 
 export async function upsertToSupabase(table: string, data: any | any[]) {

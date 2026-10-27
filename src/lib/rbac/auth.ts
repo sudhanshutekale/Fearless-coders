@@ -1,7 +1,7 @@
 import { cookies } from 'next/headers';
-import { getDb } from '@/lib/db';
 import { UserRole } from './permissions';
 import { AuthUser, DEMO_USERS } from './user-types';
+import { getSupabase, isSupabaseConfigured } from '@/lib/supabase';
 
 export * from './user-types';
 
@@ -37,28 +37,39 @@ export async function getSessionUser(): Promise<AuthUser> {
 }
 
 /**
- * Authenticates against database or demo accounts.
+ * Authenticates against Supabase database or demo accounts.
  */
-export function authenticateDemoUser(role: UserRole): AuthUser {
+export async function authenticateDemoUser(role: UserRole): Promise<AuthUser> {
   const demo = DEMO_USERS[role];
   if (!demo) {
     throw new Error(`Invalid role: ${role}`);
   }
 
-  const db = getDb();
-  const user = db.prepare('SELECT id, name, email, role, avatar_url FROM users WHERE role = ? LIMIT 1').get(role) as any;
+  // Try Supabase for real user data
+  if (isSupabaseConfigured()) {
+    const client = getSupabase();
+    if (client) {
+      const { data: user } = await client
+        .from('users')
+        .select('id, name, email, role, avatar_url')
+        .eq('role', role)
+        .limit(1)
+        .maybeSingle();
 
-  if (user) {
-    return {
-      id: user.id,
-      name: user.name,
-      email: user.email,
-      role: user.role as UserRole,
-      studentId: role === 'student' ? (demo.studentId || 's_001') : undefined,
-      avatarUrl: user.avatar_url || demo.avatar
-    };
+      if (user) {
+        return {
+          id: user.id,
+          name: user.name,
+          email: user.email,
+          role: user.role as UserRole,
+          studentId: role === 'student' ? (demo.studentId || 's_001') : undefined,
+          avatarUrl: user.avatar_url || demo.avatar
+        };
+      }
+    }
   }
 
+  // Fallback to demo user
   return {
     id: `u_${role}`,
     name: demo.name,
@@ -70,24 +81,46 @@ export function authenticateDemoUser(role: UserRole): AuthUser {
 }
 
 /**
- * Authenticates directly by user ID from database.
+ * Authenticates directly by user ID from Supabase database.
  */
-export function authenticateUserById(userId: string): AuthUser {
-  const db = getDb();
-  const user = db.prepare('SELECT id, name, email, role, avatar_url FROM users WHERE id = ? LIMIT 1').get(userId) as any;
+export async function authenticateUserById(userId: string): Promise<AuthUser> {
+  // Try Supabase
+  if (isSupabaseConfigured()) {
+    const client = getSupabase();
+    if (client) {
+      const { data: user } = await client
+        .from('users')
+        .select('id, name, email, role, avatar_url')
+        .eq('id', userId)
+        .maybeSingle();
 
-  if (!user) {
-    throw new Error(`User not found: ${userId}`);
+      if (user) {
+        const demo = DEMO_USERS[user.role as UserRole];
+        return {
+          id: user.id,
+          name: user.name,
+          email: user.email,
+          role: user.role as UserRole,
+          studentId: user.role === 'student' ? (demo?.studentId || 's_001') : undefined,
+          avatarUrl: user.avatar_url || demo?.avatar || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150'
+        };
+      }
+    }
   }
 
-  const demo = DEMO_USERS[user.role as UserRole];
+  // Fallback: check if it matches a demo user pattern
+  const roleFromId = userId.replace('u_', '') as UserRole;
+  const demo = DEMO_USERS[roleFromId];
+  if (demo) {
+    return {
+      id: userId,
+      name: demo.name,
+      email: demo.email,
+      role: demo.role,
+      studentId: roleFromId === 'student' ? (demo.studentId || 's_001') : undefined,
+      avatarUrl: demo.avatar
+    };
+  }
 
-  return {
-    id: user.id,
-    name: user.name,
-    email: user.email,
-    role: user.role as UserRole,
-    studentId: user.role === 'student' ? (demo?.studentId || 's_001') : undefined,
-    avatarUrl: user.avatar_url || demo?.avatar || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150'
-  };
+  throw new Error(`User not found: ${userId}`);
 }

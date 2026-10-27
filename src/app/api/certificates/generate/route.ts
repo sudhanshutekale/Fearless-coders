@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getDb } from '@/lib/db';
 import { getSessionUser } from '@/lib/rbac/auth';
 import { PDFDocument, rgb, StandardFonts } from 'pdf-lib';
 

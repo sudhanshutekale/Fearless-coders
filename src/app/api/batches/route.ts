@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getDb } from '@/lib/db';
+
 import { getSessionUser } from '@/lib/rbac/auth';
 import { 
   getSupabase, 
@@ -72,7 +72,7 @@ export async function GET() {
     }
 
     // 2. Fallback to SQLite
-    const db = getDb();
+    throw new Error('SQLite fallback not supported on Vercel');
     let query = `
       SELECT 
         b.id, b.name, b.days, b.start_time, b.end_time, b.mode,
@@ -179,7 +179,7 @@ export async function POST(req: NextRequest) {
 
     // 2. Also persist to SQLite if available
     try {
-      const db = getDb();
+      throw new Error('SQLite fallback not supported on Vercel');
       db.prepare(`
         INSERT INTO batches (id, course_id, trainer_id, room_id, name, days, start_time, end_time, mode, online_seat_limit, max_seats, status, start_date, end_date)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'upcoming', date('now'), date('now', '+90 days'))

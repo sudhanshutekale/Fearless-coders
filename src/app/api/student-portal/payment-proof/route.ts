@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getDb } from '@/lib/db';
 import { getSessionUser } from '@/lib/rbac/auth';
 import { getSupabase, isSupabaseConfigured, upsertToSupabase } from '@/lib/supabase';
 
